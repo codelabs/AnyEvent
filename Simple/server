@@ -1,0 +1,47 @@
+#!/usr/local/bin/perl -w
+
+use strict;
+use warnings;
+use EV;
+use AnyEvent;
+use AnyEvent::Socket;
+use AnyEvent::Handle;
+
+my $port = $ARGV[0] || '9292';
+my $cv   = AE::cv;
+
+tcp_server undef, $port, sub {
+    my $fh = shift or die "Couldn't accept client: $!";
+    my ($host, $port) = @_;
+    my $handle; $handle = AnyEvent::Handle->new(
+        fh       => $fh,
+        on_error => sub {
+            shift;
+            my ($fatal, $msg) = @_;
+            warn "ERROR !! [$msg]\n";
+            $cv->send;
+        },
+        on_eof   => sub {
+            warn "Reached EOF\n";
+            $handle->destroy;
+            $cv->send;
+        },
+    );
+
+    $handle->push_write( "Connected to server !!!\n" );
+    $handle->push_read( line => \&listener );
+};
+
+sub listener {
+    my ($h, $line) = @_;
+    warn "<Client>: $line\n";
+    $cv->send if $line =~ /^(bye|quit|exit)$/i;
+
+    $h->push_read( line => \&listener );
+}
+
+$cv->recv;
+1;
+
+
+

@@ -1,0 +1,53 @@
+#!/usr/local/bin/perl -w
+
+use strict;
+use warnings;
+
+use EV;
+use AnyEvent;
+use AnyEvent::Handle;
+use AnyEvent::Socket;
+
+my $host = $ARGV[0] || '127.0.0.1';
+my $port = $ARGV[1] || '9292';
+my $cv   = AE::cv;
+
+my $handle; $handle = AnyEvent::Handle->new(
+    connect  => [$host, $port],
+    on_error => sub {
+        shift;
+        my ($fatal, $msg) = @_;
+        warn "Error !!! [$msg]\n";
+        $cv->send;
+    },
+    on_eof   => sub {
+        warn "Eof !!!\n";
+        $handle->destroy;
+        $cv->send;
+    },
+    on_prepare => sub {
+        warn "Connecting to Host [$host] on Port [$port]\n";
+    },
+);
+
+$handle->push_write( "Client Connected !!!\n" );
+$handle->push_read( line => \&communicator );
+
+sub communicator {
+    my ($h, $line) = @_;
+    if( $line =~ /^(bye|quit|exit)$/i ) {
+        warn "Server Disconnected !!!\n";
+        $h->destroy;
+        $cv->send;
+    }
+    else {
+        warn "<Server>: $line\n";
+        $h->push_read( line => \&communicator );
+    }
+}
+
+$cv->recv;
+
+1;
+
+
